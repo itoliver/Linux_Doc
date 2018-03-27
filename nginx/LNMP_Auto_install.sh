@@ -218,4 +218,4 @@ systemctl reload nginx
 systemctl reload php-fpm
 sleep 2
 echo '######LNMP is install completed done.######'
-echo '######please Open the similar "172.17.11.186" to Visit the test.######'
+echo '######please Open the similar "rip" to Visit the test.######'
