@@ -1,5 +1,5 @@
 #!/bin/bash
-#lvs,nginx高可用集群部署
+#lvs,keepalived,nginx HA Cluster.
 #
 #DR:ip=172.17.11.1 物理ip
 #DR:vip=172.17.11.11 虚拟ip
@@ -58,70 +58,79 @@ echo '######nginx is install completed done.######'
 
 #install ipvsadm (centos7 yum源自带软件,也可以用源码编译安装)
 #---------Director(DR)-----------
-yum install -y ipvsadm
+#Configure epel yum
+wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && rpm -ivh epel-release-latest-7.noarch.rpm
+yum install -y ipvsadm keepalived
 
-#Configura virtual nat script
-cat >> /etc/init.d/ipvsadm << EOF
-#! /bin/bash
-#
-# Starts the LVS virual server daemon
-#
-# chkconfig: - 90 10
+#Configure Keepalived
+mv /etc/keepalived/keepalived.conf /etc/keepalived/keepalived.conf_bak
+cat >> /etc/keepalived/keepalived.conf << EOF
+! Configuration File for keepalived
 
-# Source function library.
-[ -f /etc/init.d/functions ] && . /etc/init.d/functions
+global_defs {
+#   notification_email {
+#     acassen@firewall.loc
+#     failover@firewall.loc
+#     sysadmin@firewall.loc
+#   }
+#   notification_email_from Alexandre.Cassen@firewall.loc
+#   smtp_server 192.168.200.1
+#   smtp_connect_timeout 30
+   router_id LVS_DEVEL
+   vrrp_skip_check_adv_addr
+   #vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+}
 
-echo 1 > /proc/sys/net/ipv4/ip_forward
-ipv=/sbin/ipvsadm
-vip=172.17.11.11
-rs1=172.17.11.213
-rs2=172.17.11.214
-logger $0 called with $1
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        172.17.11.11/16 brd 172.17.255.255 dev eth0 label eth0
+    }
+}
 
-case "$1" in
-	start)
-	ifconfig eth0:0 down
-	ifconfig eth0:0 $vip broadcast $vip netmask 255.255.255.255 up
-	route add -host $vip dev eth0:0
-	$ipv -C
-	$ipv -A -t $vip:80 -s wrr -p 120
-	#$ipv -A -t $vip:8080 -s wrr
-	$ipv -a -t $vip:80 -r $rs1:80 -g -w 3
-	$ipv -a -t $vip:80 -r $rs2:80 -g -w 3
-	#$ipv -a -t $vip:80 -r $rs2:8080 -g -w 3
-	touch /var/lock/subsys/ipvsadm > /dev/null 2>&1
-	action "ipvsadm start" /bin/true
-	;;
+virtual_server 172.17.11.11 80 {
+    delay_loop 6
+    lb_algo wrr 
+    lb_kind DR
+    nat_mask 255.255.224.0
+    persistence_timeout 50
+    protocol TCP
 
-	stop)
-	/sbin/ipvsadm -C
-	/sbin/ipvsadm -Z
-	ifconfig eth0:0 dowm
-	route del $ipv
-	rm -rf /var/lock/subsys/ipvsadm > /dev/null 2>&1
-	action "ipvsadm stoped" /bin/true
-	;;
-
-	status)
-	if [ ! -e /var/lock/subsys/ipvsadm ];then
-	    echo "ipvsadm stoped"
-	    exit 1
-	else
-	    echo "ipvsadm OK"
-	fi
-	;;
-
-	*)
-	echo "Usage: $0 {start|stop|status}"
-	exit 1
-esac
-exit 0
+    real_server 172.17.11.213 80 {
+        weight 1
+        TCP_CHECK {
+            connect_timeout 10
+            nb_get_retry 3
+            delay_before_retry 3
+	    connect_port 80
+    	}
+    }
+    real_server 172.17.11.214 80 {
+        weight 5
+        TCP_CHECK {
+            connect_timeout 10
+            nb_get_retry 3
+            delay_before_retry 3
+	    connect_port 8080
+	}
+    }
+}
 EOF
-chmod a+x /etc/init.d/ipvsadm
-chkconfig --all ipvsadm
-chkconfig ipvsadm on
-/etc/init.d/ipvsadm start
 
+systemctl enable keepalived
+systemctl start keepalived
+
+#iptables -t nat -A PREROUTING -p tcp -d 172.17.0.0 --dport 80 -j REDIRECT
 
 #--------rs-1----------------
 #install nginx
