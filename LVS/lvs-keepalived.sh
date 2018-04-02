@@ -1,6 +1,7 @@
 #!/bin/bash
 #lvs,keepalived,nginx HA Cluster.
 #
+#----Author:oliver
 #DR:ip=172.17.11.1 物理ip
 #DR:vip=172.17.11.11 虚拟ip
 #realserver1:172.17.11.213 物理ip
