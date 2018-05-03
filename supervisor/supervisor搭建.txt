@@ -1,13 +1,8 @@
 1.安装
-
 系统：centos7，默认在root用户下安装，使用普通用户，可使用sudo
-
 yum install python-setuptools -y
-
 easy_install supervisor	#如果没看到报错信息，就说明安装成功了，可以使用echo_supervisord_conf查看配置详情，而后生成配置文件
-
 mkdir -m 755 -p /etc/supervisor/
-
 echo_supervisord_conf > /etc/supervisor/supervisord.conf
 
 2.
