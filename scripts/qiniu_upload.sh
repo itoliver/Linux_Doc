@@ -49,7 +49,6 @@ do
    else
      echo "File mimetype error"
    fi
-
 done
 }
 
@@ -73,6 +72,7 @@ done
 
 #执行download
 download
+zip -r /usr/local/pic.zip $dirname/*
 
 #执行compress
 compress "$dirname"
